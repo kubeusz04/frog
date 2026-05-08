@@ -18,13 +18,22 @@ class DownloadError(RuntimeError):
 
 
 def _cookies_file() -> str | None:
+    runtime_dir = Path(os.environ.get("FROG_RUNTIME_DIR", "/tmp/frog"))
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+
     cookies_file = os.environ.get("FROG_YTDLP_COOKIES_FILE", "").strip()
     if cookies_file and Path(cookies_file).exists():
-        return cookies_file
+        source = Path(cookies_file)
+        target = runtime_dir / "youtube-cookies.txt"
+        if source.resolve() != target.resolve():
+            target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        return str(target)
 
     render_secret_file = Path("/etc/secrets/youtube-cookies.txt")
     if render_secret_file.exists():
-        return str(render_secret_file)
+        target = runtime_dir / "youtube-cookies.txt"
+        target.write_text(render_secret_file.read_text(encoding="utf-8"), encoding="utf-8")
+        return str(target)
 
     cookies_text = os.environ.get("FROG_YTDLP_COOKIES_TEXT", "").strip()
     cookies_b64 = os.environ.get("FROG_YTDLP_COOKIES_BASE64", "").strip()
@@ -37,8 +46,7 @@ def _cookies_file() -> str | None:
         except Exception as exc:
             raise DownloadError("Nie udalo sie odczytac FROG_YTDLP_COOKIES_BASE64.") from exc
 
-    cookie_path = Path(os.environ.get("FROG_RUNTIME_DIR", "/tmp/frog")) / "youtube-cookies.txt"
-    cookie_path.parent.mkdir(parents=True, exist_ok=True)
+    cookie_path = runtime_dir / "youtube-cookies.txt"
     cookie_path.write_text(cookies_text, encoding="utf-8")
     return str(cookie_path)
 
