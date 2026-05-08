@@ -1,0 +1,14 @@
+services:
+  frog-mobile-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.mobile
+    container_name: frog-mobile-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      FROG_HOME: /tmp/frog
+      FROG_RUNTIME_DIR: /tmp/frog
+    volumes:
+      - ./youtube-cookies.txt:/etc/secrets/youtube-cookies.txt:ro
