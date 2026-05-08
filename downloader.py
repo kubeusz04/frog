@@ -58,6 +58,7 @@ def _yt_dlp_base_options() -> dict:
         "retries": 3,
         "fragment_retries": 3,
         "extractor_retries": 3,
+        "nocheckcertificate": True,
     }
     cookiefile = _cookies_file()
     if cookiefile:
@@ -142,9 +143,8 @@ class YouTubeDownloader:
                 progress_cb({"status": "converting", "percent": 99.0})
 
         outtmpl = str(self.cache_dir / "%(id)s.%(ext)s")
-        options = {
+        base_options = {
             **_yt_dlp_base_options(),
-            "format": "bestaudio/best",
             "outtmpl": outtmpl,
             "progress_hooks": [hook],
             "ffmpeg_location": ffmpeg_path(),
@@ -156,18 +156,51 @@ class YouTubeDownloader:
                 }
             ],
         }
+        attempts = [
+            {
+                "format": "bestaudio/best",
+            },
+            {
+                "format": "bestaudio[ext=m4a]/bestaudio/best",
+                "extractor_args": {"youtube": {"player_client": ["android", "ios", "web"]}},
+            },
+            {
+                "format": "ba/b",
+                "extractor_args": {"youtube": {"player_client": ["ios", "android", "web_embedded"]}},
+            },
+            {
+                "format": "best",
+                "extractor_args": {"youtube": {"player_client": ["web", "android", "ios"]}},
+            },
+        ]
 
-        try:
-            with yt_dlp.YoutubeDL(options) as ydl:
-                info = ydl.extract_info(YOUTUBE_WATCH.format(video_id=video_id), download=True)
-        except Exception as exc:
-            message = str(exc)
+        last_error = ""
+        info = None
+        for attempt in attempts:
+            options = {**base_options, **attempt}
+            try:
+                with yt_dlp.YoutubeDL(options) as ydl:
+                    info = ydl.extract_info(YOUTUBE_WATCH.format(video_id=video_id), download=True)
+                break
+            except Exception as exc:
+                last_error = str(exc)
+                for leftover in self.cache_dir.glob(f"{video_id}*"):
+                    if leftover.suffix.lower() != ".mp3":
+                        leftover.unlink(missing_ok=True)
+
+        if info is None:
+            message = last_error
             if "Sign in to confirm" in message or "not a bot" in message:
                 message = (
-                    "YouTube blokuje IP hostingu i wymaga zalogowanej sesji. "
-                    "Dodaj cookies do Render jako FROG_YTDLP_COOKIES_BASE64 albo uruchom backend na VPS/lokalnie."
+                    "YouTube blocks this hosting IP and requires a signed-in session. "
+                    "Add YouTube cookies as a Render Secret File named youtube-cookies.txt or run the backend on a VPS/local machine."
                 )
-            raise DownloadError(message) from exc
+            elif "Requested format is not available" in message:
+                message = (
+                    "YouTube did not expose a downloadable audio format for this track from the current server. "
+                    "Try another track, refresh cookies, or move the backend to a VPS/local machine with a less restricted IP."
+                )
+            raise DownloadError(message)
 
         if not mp3_path.exists():
             candidates = sorted(self.cache_dir.glob(f"{video_id}*.mp3"))
