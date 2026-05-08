@@ -1,3 +1,4 @@
+import base64
 import os
 import re
 import time
@@ -14,6 +15,45 @@ YOUTUBE_WATCH = "https://www.youtube.com/watch?v={video_id}"
 
 class DownloadError(RuntimeError):
     pass
+
+
+def _cookies_file() -> str | None:
+    cookies_file = os.environ.get("FROG_YTDLP_COOKIES_FILE", "").strip()
+    if cookies_file and Path(cookies_file).exists():
+        return cookies_file
+
+    render_secret_file = Path("/etc/secrets/youtube-cookies.txt")
+    if render_secret_file.exists():
+        return str(render_secret_file)
+
+    cookies_text = os.environ.get("FROG_YTDLP_COOKIES_TEXT", "").strip()
+    cookies_b64 = os.environ.get("FROG_YTDLP_COOKIES_BASE64", "").strip()
+    if not cookies_text and not cookies_b64:
+        return None
+
+    if cookies_b64:
+        try:
+            cookies_text = base64.b64decode(cookies_b64).decode("utf-8")
+        except Exception as exc:
+            raise DownloadError("Nie udalo sie odczytac FROG_YTDLP_COOKIES_BASE64.") from exc
+
+    cookie_path = CACHE_DIR.parent / "youtube-cookies.txt"
+    cookie_path.write_text(cookies_text, encoding="utf-8")
+    return str(cookie_path)
+
+
+def _yt_dlp_base_options() -> dict:
+    options = {
+        "quiet": True,
+        "noplaylist": True,
+        "retries": 3,
+        "fragment_retries": 3,
+        "extractor_retries": 3,
+    }
+    cookiefile = _cookies_file()
+    if cookiefile:
+        options["cookiefile"] = cookiefile
+    return options
 
 
 def _safe_text(value: str | None) -> str:
@@ -37,11 +77,10 @@ class YouTubeDownloader:
             return []
 
         options = {
-            "quiet": True,
+            **_yt_dlp_base_options(),
             "skip_download": True,
             "extract_flat": True,
             "default_search": "ytsearch",
-            "noplaylist": True,
         }
         with yt_dlp.YoutubeDL(options) as ydl:
             data = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
@@ -95,10 +134,9 @@ class YouTubeDownloader:
 
         outtmpl = str(self.cache_dir / "%(id)s.%(ext)s")
         options = {
+            **_yt_dlp_base_options(),
             "format": "bestaudio/best",
             "outtmpl": outtmpl,
-            "noplaylist": True,
-            "quiet": True,
             "progress_hooks": [hook],
             "ffmpeg_location": ffmpeg_path(),
             "postprocessors": [
@@ -114,7 +152,13 @@ class YouTubeDownloader:
             with yt_dlp.YoutubeDL(options) as ydl:
                 info = ydl.extract_info(YOUTUBE_WATCH.format(video_id=video_id), download=True)
         except Exception as exc:
-            raise DownloadError(str(exc)) from exc
+            message = str(exc)
+            if "Sign in to confirm" in message or "not a bot" in message:
+                message = (
+                    "YouTube blokuje IP hostingu i wymaga zalogowanej sesji. "
+                    "Dodaj cookies do Render jako FROG_YTDLP_COOKIES_BASE64 albo uruchom backend na VPS/lokalnie."
+                )
+            raise DownloadError(message) from exc
 
         if not mp3_path.exists():
             candidates = sorted(self.cache_dir.glob(f"{video_id}*.mp3"))
