@@ -66,6 +66,35 @@ def _yt_dlp_base_options() -> dict:
     return options
 
 
+def _read_secret_value(name: str, filename: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if value:
+        return value
+
+    secret_file = Path("/etc/secrets") / filename
+    if secret_file.exists():
+        return secret_file.read_text(encoding="utf-8").strip()
+    return ""
+
+
+def _youtube_extractor_args(clients: list[str]) -> dict:
+    args: dict[str, list[str]] = {"player_client": clients}
+    po_token = _read_secret_value("FROG_YTDLP_PO_TOKEN", "youtube-po-token.txt")
+    visitor_data = _read_secret_value("FROG_YTDLP_VISITOR_DATA", "youtube-visitor-data.txt")
+
+    if po_token:
+        args["po_token"] = [
+            f"web.gvs+{po_token}",
+            f"mweb.gvs+{po_token}",
+            f"android.gvs+{po_token}",
+            f"ios.gvs+{po_token}",
+        ]
+    if visitor_data:
+        args["visitor_data"] = [visitor_data]
+
+    return {"youtube": args}
+
+
 def _safe_text(value: str | None) -> str:
     return value or ""
 
@@ -162,15 +191,24 @@ class YouTubeDownloader:
             },
             {
                 "format": "bestaudio[ext=m4a]/bestaudio/best",
-                "extractor_args": {"youtube": {"player_client": ["android", "ios", "web"]}},
+                "extractor_args": _youtube_extractor_args(["mweb", "android", "ios", "web"]),
             },
             {
                 "format": "ba/b",
-                "extractor_args": {"youtube": {"player_client": ["ios", "android", "web_embedded"]}},
+                "extractor_args": _youtube_extractor_args(["mweb", "ios", "android", "web_embedded"]),
             },
             {
                 "format": "best",
-                "extractor_args": {"youtube": {"player_client": ["web", "android", "ios"]}},
+                "extractor_args": _youtube_extractor_args(["mweb", "web", "android", "ios"]),
+            },
+            {
+                "format": "best",
+                "extractor_args": {
+                    "youtube": {
+                        **_youtube_extractor_args(["default", "mweb"])["youtube"],
+                        "formats": ["missing_pot"],
+                    }
+                },
             },
         ]
 
