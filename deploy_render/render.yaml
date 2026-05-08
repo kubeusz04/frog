@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: frog-mobile-api
+    env: docker
+    dockerfilePath: ./Dockerfile.mobile
+    plan: free
+    healthCheckPath: /api/health
