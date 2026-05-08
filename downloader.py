@@ -37,7 +37,8 @@ def _cookies_file() -> str | None:
         except Exception as exc:
             raise DownloadError("Nie udalo sie odczytac FROG_YTDLP_COOKIES_BASE64.") from exc
 
-    cookie_path = CACHE_DIR.parent / "youtube-cookies.txt"
+    cookie_path = Path(os.environ.get("FROG_RUNTIME_DIR", "/tmp/frog")) / "youtube-cookies.txt"
+    cookie_path.parent.mkdir(parents=True, exist_ok=True)
     cookie_path.write_text(cookies_text, encoding="utf-8")
     return str(cookie_path)
 
