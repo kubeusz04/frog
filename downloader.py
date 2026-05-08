@@ -187,26 +187,26 @@ class YouTubeDownloader:
         }
         attempts = [
             {
-                "format": "bestaudio/best",
+                "format": "bestaudio[protocol^=http]/bestaudio/best[protocol^=http]/best",
             },
             {
                 "format": "bestaudio[ext=m4a]/bestaudio/best",
-                "extractor_args": _youtube_extractor_args(["mweb", "android", "ios", "web"]),
+                "extractor_args": _youtube_extractor_args(["web", "web_safari", "mweb", "android", "ios"]),
             },
             {
                 "format": "ba/b",
-                "extractor_args": _youtube_extractor_args(["mweb", "ios", "android", "web_embedded"]),
+                "extractor_args": _youtube_extractor_args(["tv", "tv_simply", "web_embedded", "mweb", "ios", "android"]),
             },
             {
                 "format": "best",
-                "extractor_args": _youtube_extractor_args(["mweb", "web", "android", "ios"]),
+                "extractor_args": _youtube_extractor_args(["tv", "tv_simply", "web", "web_safari", "android", "ios"]),
             },
             {
-                "format": "best",
+                "format": "bestaudio/best",
                 "extractor_args": {
                     "youtube": {
-                        **_youtube_extractor_args(["default", "mweb"])["youtube"],
-                        "formats": ["missing_pot"],
+                        **_youtube_extractor_args(["default", "mweb", "web_safari"])["youtube"],
+                        "formats": ["incomplete"],
                     }
                 },
             },
