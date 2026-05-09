@@ -1,11 +1,13 @@
 import base64
 import os
 import re
+import subprocess
 import time
 from pathlib import Path
 from typing import Callable
 
 import yt_dlp
+from pytube import YouTube
 
 from config import CACHE_DIR, ensure_app_dirs, ffmpeg_path
 
@@ -153,6 +155,57 @@ class YouTubeDownloader:
                 progress_cb({"status": "finished", "percent": 100.0})
             return self._track_from_existing(video_id, mp3_path)
 
+        # Try Pytube first (video download often more stable)
+        pytube_error = None
+        try:
+            if progress_cb:
+                progress_cb({"status": "downloading", "percent": 10.0})
+            
+            yt = YouTube(YOUTUBE_WATCH.format(video_id=video_id))
+            
+            # Get best video stream
+            stream = yt.streams.filter(progressive=False, file_extension="mp4").order_by("resolution").desc().first()
+            
+            if stream:
+                if progress_cb:
+                    progress_cb({"status": "downloading", "percent": 30.0})
+                
+                temp_video = self.cache_dir / f"{video_id}_temp.mp4"
+                stream.download(output_path=self.cache_dir, filename=temp_video.name)
+                
+                if progress_cb:
+                    progress_cb({"status": "converting", "percent": 70.0})
+                
+                # Convert video to MP3 using ffmpeg
+                cmd = [
+                    ffmpeg_path(),
+                    "-i", str(temp_video),
+                    "-vn",  # no video
+                    "-acodec", "libmp3lame",
+                    "-q:a", "5",  # quality
+                    str(mp3_path),
+                ]
+                subprocess.run(cmd, check=True, capture_output=True)
+                temp_video.unlink(missing_ok=True)
+                
+                if progress_cb:
+                    progress_cb({"status": "finished", "percent": 100.0})
+                
+                return {
+                    "video_id": video_id,
+                    "title": yt.title,
+                    "channel": yt.author or "",
+                    "duration": yt.length,
+                    "file_path": str(mp3_path),
+                    "file_size": os.path.getsize(mp3_path),
+                    "downloaded_at": time.time(),
+                }
+        except Exception as exc:
+            pytube_error = str(exc)
+            # Fall back to yt-dlp
+            pass
+
+        # Fallback: use yt-dlp (audio download with multiple fallback formats)
         def hook(status: dict) -> None:
             if not progress_cb:
                 return
@@ -212,7 +265,7 @@ class YouTubeDownloader:
             },
         ]
 
-        last_error = ""
+        last_error = pytube_error or ""
         info = None
         for attempt in attempts:
             options = {**base_options, **attempt}

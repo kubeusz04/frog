@@ -1,4 +1,11 @@
+customtkinter==5.2.2
+pygame==2.6.1
+pydub==0.25.1
+audioop-lts==0.2.2; python_version >= "3.13"
+yt-dlp==2026.3.17
+pytubefix==6.7.0
 fastapi==0.136.1
 uvicorn[standard]==0.46.0
-yt-dlp[default] @ https://github.com/yt-dlp/yt-dlp/archive/refs/heads/master.zip
-pydantic==2.12.5
+websockets==16.0
+firebase-admin==7.4.0
+pyinstaller==6.20.0
